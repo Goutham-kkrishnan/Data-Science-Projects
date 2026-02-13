@@ -1,0 +1,5 @@
+Model_name,Accuracy,Precision,Recall
+Logistic Regression,0.87,0.85,0.84
+Random Forest,0.91,0.90,0.89
+Support Vector Machine,0.89,0.88,0.86
+Neural Network,0.93,0.92,0.91
