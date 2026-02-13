@@ -1,342 +1,447 @@
 import streamlit as st
 import os
 import pandas as pd
-from streamlit_option_menu import option_menu
+import pickle
+import warnings
+from io import BytesIO
 
-# ---------- Page Configuration ----------
+# Import your model functions
+from models.logistic_regression import logistic_regression
+from models.decision_tree import decision_tree
+from models.knn import knn
+from models.naive_bayes import naive_bayes
+from models.random_forest import random_forest
+from models.xgboost import xgboost_model
+from models.preprocessing import preprocess_features
+warnings.filterwarnings("ignore")
+
+# --------------------------------------------------
+# Page Configuration
+# --------------------------------------------------
 st.set_page_config(
-    page_title="ML Model Dashboard",
+    page_title="Obesity Prediction Dashboard",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# ---------- Custom CSS Styling ----------
+# --------------------------------------------------
+# Custom CSS (unchanged)
+# --------------------------------------------------
 st.markdown("""
-    <style>
-    /* Hide Deploy Button */
-    .stAppDeployButton {
-        display: none;
-    }
-    
-    /* Main container styling */
-    .main {
-        padding: 0rem 1rem;
-    }
-    
-    /* Card styling */
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 10px;
-        padding: 1.5rem;
-        color: white;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    }
-    
-    .input-card {
-        background: #f8f9fa;
-        border-radius: 10px;
-        padding: 1.5rem;
-        border-left: 4px solid #667eea;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    }
-    
-    /* Button styling */
-    .stButton > button {
-        width: 100%;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        padding: 0.75rem 1.5rem;
-        font-weight: 600;
-        border-radius: 8px;
-        transition: all 0.3s ease;
-    }
-    
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 12px rgba(102, 126, 234, 0.3);
-    }
-    
-    /* Title styling */
-    .main-title {
-        font-size: 2.5rem;
-        font-weight: 700;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin-bottom: 1rem;
-    }
-    
-    /* Divider styling */
-    .divider {
-        border: none;
-        height: 1px;
-        background: linear-gradient(90deg, transparent, #667eea, transparent);
-        margin: 2rem 0;
-    }
-    
-    /* Metric container */
-    .metric-container {
-        background: white;
-        border-radius: 10px;
-        padding: 1rem;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        border: 1px solid #e9ecef;
-    }
-    
-    /* Success message */
-    .stAlert {
-        border-radius: 10px;
-    }
-    
-    /* Selectbox styling */
-    .stSelectbox > div > div {
-        border-radius: 8px;
-        border: 2px solid #e9ecef;
-    }
-    
-    .stSelectbox > div > div:hover {
-        border-color: #667eea;
-    }
-    </style>
+<style>
+.stAppDeployButton {display:none;}
+.main-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.input-card {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 10px;
+    border-left: 4px solid #667eea;
+}
+.metric-container {
+    background: white;
+    padding: 1rem;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    color: black !important;
+}
+.metric-container h1, 
+.metric-container h3, 
+.metric-container p {
+    color: black !important;
+}
+.stButton > button {
+    width: 100%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 8px;
+    font-weight: 600;
+}
+</style>
 """, unsafe_allow_html=True)
 
-# ---------- Dummy Prediction Function ----------
-def predict(model_name, feature_dropdown, feature_text, feature_checkbox):
-    """
-    Dummy prediction logic.
-    Replace this with actual model.predict() later.
-    """
-    return f"✅ Prediction successful using {model_name.replace('_', ' ').title()}"
-
-# ---------- Sidebar ----------
-
-st.set_page_config(
-    page_title="My App",
-    layout="wide",
-    initial_sidebar_state="expanded"  # <-- IMPORTANT
+# --------------------------------------------------
+# Sidebar – Page Selection
+# --------------------------------------------------
+st.sidebar.markdown("## 🤖 Navigation")
+page = st.sidebar.radio(
+    "Go to",
+    ["Single Prediction", "Batch Model Evaluation"]
 )
-with st.sidebar:
-    st.markdown("""
-        <div style='text-align: center; margin-bottom: 2rem;'>
-            <h2 style='color: #667eea;'>🤖 Model Dashboard</h2>
-            <p style='color: #6c757d;'>Select a model to view metrics and make predictions</p>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("### 📂 Available Models")
-    
-    # Load Models
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("📌 **Single Prediction**: use pre‑trained models on one person.")
+st.sidebar.markdown("📌 **Batch Evaluation**: upload CSV → retrain & evaluate all models.")
+
+# --------------------------------------------------
+# Helper: Load performance.csv (for Single Prediction only)
+# --------------------------------------------------
+def load_performance():
+    if os.path.exists("performance.csv"):
+        return pd.read_csv("performance.csv")
+    elif os.path.exists("performace.csv"):
+        return pd.read_csv("performace.csv")
+    return None
+
+# --------------------------------------------------
+# PAGE 1 : SINGLE PREDICTION (your existing code, slightly adapted)
+# --------------------------------------------------
+def single_prediction_page():
+    st.markdown("<h1 class='main-title'>📊 Single Obesity Prediction</h1>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    # Model selection
     MODEL_DIR = "models"
     model_files = [
-        file.replace(".pkl", "")
-        for file in os.listdir(MODEL_DIR)
-        if file.endswith(".pkl")
+        f.replace(".pkl", "")
+        for f in os.listdir(MODEL_DIR)
+        if f.endswith(".pkl") and f != "scaler.pkl"
     ]
-    
-    model_options = ["-- Select a model --"] + model_files
-    
-    selected_model = st.selectbox(
-        "Choose Model",
-        model_options,
-        key="model_selector"
+    selected_model = st.sidebar.selectbox(
+        "Select ML Model",
+        ["-- Select Model --"] + model_files
     )
-    
-    st.markdown("---")
-    
-    # Information panel
-    with st.expander("ℹ️ How to Use", expanded=False):
-        st.markdown("""
-        1. **Select a model** from the dropdown
-        2. **View performance metrics**
-        3. **Input features** for prediction
-        4. **Click Predict** to get results
-        
-        All models are trained and ready for inference.
-        """)
-    
-    st.markdown("---")
-    st.markdown("""
-        <div style='text-align: center; color: #6c757d; font-size: 0.8rem;'>
-        ML Assignment 2<br>
-        Powered by Streamlit
-        </div>
-    """, unsafe_allow_html=True)
 
-# ---------- Main Content ----------
+    # Load metrics
+    results_df = load_performance()
 
-# Header
-col1, col2, col3 = st.columns([1, 2, 1])
-with col2:
-    st.markdown("<h1 class='main-title'>📊 Machine Learning Dashboard</h1>", unsafe_allow_html=True)
+    if selected_model != "-- Select Model --":
+        # Display metrics (unchanged) ...
+        if results_df is not None:
+            row = results_df[results_df["Model"].str.lower() == selected_model.lower()]
+            if not row.empty:
+                acc = row['Accuracy'].values[0]
+                auc = row['AUC'].values[0]
+                prec = row['Precision'].values[0]
+                rec = row['Recall'].values[0]
+                f1 = row['F1 Score'].values[0]
+                col1, col2, col3, col4, col5 = st.columns(5)
+                with col1: st.metric("Accuracy", f"{acc:.3f}")
+                with col2: st.metric("AUC", f"{auc:.3f}")
+                with col3: st.metric("Precision", f"{prec:.3f}")
+                with col4: st.metric("Recall", f"{rec:.3f}")
+                with col5: st.metric("F1 Score", f"{f1:.3f}")
 
-st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
+        st.markdown("---")
+        st.markdown("## 🔧 Enter Input Features")
 
-# ---------- Load CSV ----------
-df = pd.read_csv("model_result.csv")
+        # Encoding maps (unchanged) ...
+        gender_map = {"Male": 1, "Female": 0}
+        yes_no_map = {"Yes": 1, "No": 0}
+        caec_map = {"No": 0, "Sometimes": 1, "Frequently": 2, "Always": 3}
+        calc_map = {"No": 0, "Sometimes": 1, "Frequently": 2}
+        mtrans_map = {"Automobile": 0, "Bike": 1, "Motorbike": 2,
+                      "Public Transportation": 3, "Walking": 4}
 
-# ---------- Main Content Area ----------
-if selected_model != "-- Select a model --":
-    
-    model_data = df[
-        df["Model_name"].str.lower()
-        == selected_model.replace("_", " ").lower()
-    ]
-    
-    # Model Header
-    st.markdown(f"""
-        <div style='background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); 
-                    padding: 1.5rem; 
-                    border-radius: 10px;
-                    margin-bottom: 2rem;
-                    border-left: 4px solid #667eea;'>
-            <h2 style='margin: 0; color: #495057;'>
-                🚀 Selected Model: <span style='color: #667eea;'>{selected_model.replace('_', ' ').title()}</span>
-            </h2>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    # ---------- Display Metrics ----------
-    if not model_data.empty:
-        accuracy = model_data["Accuracy"].values[0]
-        precision = model_data["Precision"].values[0]
-        recall = model_data["Recall"].values[0]
-        
-        st.markdown("### 📈 Model Performance")
-        
-        # Create three columns for metrics with better styling
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.markdown("""
-                <div class='metric-container'>
-                    <div style='text-align: center;'>
-                        <h3 style='color: #667eea; margin-bottom: 0.5rem;'>🎯 Accuracy</h3>
-                        <h1 style='color: #28a745; margin: 0;'>{:.2%}</h1>
-                        <p style='color: #6c757d; font-size: 0.9rem; margin-top: 0.5rem;'>
-                        Correct predictions ratio
-                        </p>
-                    </div>
-                </div>
-            """.format(accuracy), unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown("""
-                <div class='metric-container'>
-                    <div style='text-align: center;'>
-                        <h3 style='color: #667eea; margin-bottom: 0.5rem;'>⚖️ Precision</h3>
-                        <h1 style='color: #17a2b8; margin: 0;'>{:.2%}</h1>
-                        <p style='color: #6c757d; font-size: 0.9rem; margin-top: 0.5rem;'>
-                        Positive prediction accuracy
-                        </p>
-                    </div>
-                </div>
-            """.format(precision), unsafe_allow_html=True)
-        
-        with col3:
-            st.markdown("""
-                <div class='metric-container'>
-                    <div style='text-align: center;'>
-                        <h3 style='color: #667eea; margin-bottom: 0.5rem;'>📊 Recall</h3>
-                        <h1 style='color: #ffc107; margin: 0;'>{:.2%}</h1>
-                        <p style='color: #6c757d; font-size: 0.9rem; margin-top: 0.5rem;'>
-                        True positive rate
-                        </p>
-                    </div>
-                </div>
-            """.format(recall), unsafe_allow_html=True)
-        
-        st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
-        
-        # ---------- Feature Inputs ----------
-        st.markdown("### 🔧 Input Features for Prediction")
-        
-        # Create input card
+        # Input form (unchanged) ...
         with st.container():
             st.markdown('<div class="input-card">', unsafe_allow_html=True)
-            
-            col1, col2 = st.columns(2)
-            
+            col1, col2, col3 = st.columns(3)
             with col1:
-                feature_dropdown = st.selectbox(
-                    "📋 Feature 1 - Category",
-                    ["Option A", "Option B", "Option C"],
-                    help="Select a categorical feature value"
-                )
-                
-                feature_checkbox = st.checkbox(
-                    "✅ Enable Feature 3",
-                    help="Toggle this feature on/off"
-                )
-            
+                gender = st.selectbox("Gender", ["Male", "Female"])
+                age = st.number_input("Age", 10, 100, 21)
+                height = st.number_input("Height (m)", 1.0, 2.5, 1.70)
+                weight = st.number_input("Weight (kg)", 20.0, 200.0, 70.0)
             with col2:
-                feature_text = st.text_input(
-                    "🔢 Feature 2 - Numeric/Text",
-                    placeholder="Enter value here...",
-                    help="Input a numeric or text feature value"
-                )
-                
-                # Add some spacing
-                st.markdown("<br><br>", unsafe_allow_html=True)
-            
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
-        
-        # ---------- Submit Button ----------
-        st.markdown("### 🎯 Ready to Predict")
-        
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            if st.button("🚀 Run Prediction", use_container_width=True):
-                with st.spinner("Making prediction..."):
-                    # Simulate processing time
-                    import time
-                    time.sleep(0.5)
-                    
-                    result = predict(
-                        selected_model,
-                        feature_dropdown,
-                        feature_text,
-                        feature_checkbox
-                    )
-                    
-                    # Display result in a nice container
-                    st.markdown(f"""
-                        <div style='background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
-                                    padding: 1.5rem;
-                                    border-radius: 10px;
-                                    border-left: 4px solid #28a745;
-                                    margin-top: 1rem;'>
-                            <h3 style='color: #155724; margin: 0;'>
-                                {result}
-                            </h3>
-                            <p style='color: #0c5460; margin-top: 0.5rem; margin-bottom: 0;'>
-                                Model inference completed successfully
-                            </p>
-                        </div>
-                    """, unsafe_allow_html=True)
-    
-    else:
-        st.warning("⚠️ No metrics found for the selected model.")
-        st.info("Please ensure the model is properly trained and metrics are recorded.")
+                family = st.selectbox("Family History Overweight", ["Yes", "No"])
+                favc = st.selectbox("High Calorie Food (FAVC)", ["Yes", "No"])
+                fcvc = st.slider("Vegetable Intake (FCVC)", 1, 3, 2)
+                ncp = st.slider("Meals per Day (NCP)", 1, 4, 3)
+            with col3:
+                caec = st.selectbox("Snacking (CAEC)", ["No", "Sometimes", "Frequently", "Always"])
+                smoke = st.selectbox("Smoking", ["Yes", "No"])
+                ch2o = st.slider("Water Intake (CH2O)", 1, 3, 2)
+                faf = st.slider("Physical Activity (FAF)", 0, 3, 1)
+                tue = st.slider("Technology Use (TUE)", 0, 3, 1)
+                calc = st.selectbox("Alcohol Consumption (CALC)", ["No", "Sometimes", "Frequently"])
+                mtrans = st.selectbox("Transport Mode (MTRANS)", list(mtrans_map.keys()))
+            st.markdown("</div>", unsafe_allow_html=True)
 
-else:
-    # Welcome state
+        if st.button("🚀 Predict Obesity Level"):
+            model_path = f"models/{selected_model}.pkl"
+            scaler_path = "models/scaler.pkl"
+            if not os.path.exists(model_path):
+                st.error("❌ Model file not found.")
+            elif not os.path.exists(scaler_path):
+                st.error("❌ Scaler file not found.")
+            else:
+                model = pickle.load(open(model_path, "rb"))
+                scaler = pickle.load(open(scaler_path, "rb"))
+
+                input_df = pd.DataFrame([{
+                    "Gender": gender_map[gender],
+                    "Age": age,
+                    "Height": height,
+                    "Weight": weight,
+                    "family_history_with_overweight": yes_no_map[family],
+                    "FAVC": yes_no_map[favc],
+                    "FCVC": fcvc,
+                    "NCP": ncp,
+                    "CAEC": caec_map[caec],
+                    "SMOKE": yes_no_map[smoke],
+                    "CH2O": ch2o,
+                    "SCC": 0,
+                    "FAF": faf,
+                    "TUE": tue,
+                    "CALC": calc_map[calc],
+                    "MTRANS": mtrans_map[mtrans]
+                }])
+                input_df = preprocess_features(input_df)
+                input_scaled = scaler.transform(input_df)
+                prediction = model.predict(input_scaled)[0]
+                st.success(f"✅ **Predicted Obesity Category:** {prediction}")
+
+# --------------------------------------------------
+# PAGE 2 : BATCH MODEL EVALUATION (NEW)
+# --------------------------------------------------
+# def batch_evaluation_page():
+#     st.markdown("<h1 class='main-title'>📁 Batch Model Evaluation</h1>", unsafe_allow_html=True)
+#     st.markdown("---")
+#     st.markdown("""
+#     Upload a **CSV file** with the **same columns** as the original dataset.  
+#     The six models will be **retrained on your uploaded data** (80/20 split) and evaluated.  
+#     All metrics and classification reports are displayed below.
+#     """)
+
+#     uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+
+#     if uploaded_file is not None:
+#         df = pd.read_csv(uploaded_file)
+#         st.success(f"✅ File loaded: {uploaded_file.name} – shape {df.shape}")
+
+#         with st.expander("📄 Preview of uploaded data"):
+#             st.dataframe(df.head())
+
+#         # Check required columns (simplified – you can expand)
+#         required_cols = ['Gender', 'Age', 'Height', 'Weight', 'family_history_with_overweight',
+#                          'FAVC', 'FCVC', 'NCP', 'CAEC', 'SMOKE', 'CH2O', 'SCC',
+#                          'FAF', 'TUE', 'CALC', 'MTRANS', 'NObeyesdad']
+#         missing = [col for col in required_cols if col not in df.columns]
+#         if missing:
+#             st.error(f"❌ Missing columns: {missing}")
+#             return
+
+#         st.markdown("---")
+#         st.markdown("## 🔄 Running all 6 models ...")
+
+#         # List of model functions (each returns (results_df, report_dict))
+#         models = [
+#             ("Logistic Regression", logistic_regression),
+#             ("Decision Tree", decision_tree),
+#             ("KNN", knn),
+#             ("Naive Bayes", naive_bayes),
+#             ("Random Forest", random_forest),
+#             ("XGBoost", xgboost_model)
+#         ]
+
+#         all_results = []
+#         all_reports = {}
+
+#         progress_bar = st.progress(0)
+#         status_text = st.empty()
+
+#         for i, (name, func) in enumerate(models):
+#             status_text.text(f"Training {name} ...")
+#             try:
+#                 result_row, report_dict = func(df)                result_row, report_dict = func(df)
+
+#                 all_results.append(result_row)
+#                 all_reports[name] = report_dict
+#             except Exception as e:
+#                 st.error(f"⚠️ Error in {name}: {str(e)}")
+#             progress_bar.progress((i + 1) / len(models))
+
+#         status_text.text("✅ All models completed!")
+#         progress_bar.empty()
+
+#         if all_results:
+#             # Combine metrics
+#             metrics_df = pd.concat(all_results, ignore_index=True)
+#             metrics_df = metrics_df[['Model', 'Accuracy', 'AUC', 'Precision', 'Recall', 'F1 Score', 'MCC']]
+
+#             st.markdown("---")
+#             st.markdown("## 📊 Performance Comparison")
+
+#             # Color-coded table
+#             st.dataframe(
+#                 metrics_df.style
+#                 .background_gradient(cmap='Blues', subset=['Accuracy', 'AUC', 'Precision', 'Recall', 'F1 Score', 'MCC'])
+#                 .format(precision=3)
+#             )
+
+#             # Download button
+#             csv = metrics_df.to_csv(index=False).encode('utf-8')
+#             st.download_button(
+#                 label="📥 Download Metrics CSV",
+#                 data=csv,
+#                 file_name="batch_performance.csv",
+#                 mime="text/csv"
+#             )
+
+#             # Classification Reports
+#             st.markdown("---")
+#             st.markdown("## 📋 Classification Reports")
+#             tabs = st.tabs([name for name, _ in models])
+
+#             for tab, (name, _) in zip(tabs, models):
+#                 with tab:
+#                     if name in all_reports:
+#                         report_df = pd.DataFrame(all_reports[name]).transpose()
+#                         st.dataframe(report_df.style.format(precision=3))
+#                     else:
+#                         st.warning("Report not available.")
+#         else:
+#             st.error("❌ No models could be evaluated successfully.")
+def batch_evaluation_page():
+    st.markdown("<h1 class='main-title'>📁 Batch Model Evaluation</h1>", unsafe_allow_html=True)
+    st.markdown("---")
     st.markdown("""
-        <div style='text-align: center; padding: 4rem 2rem; background: #f8f9fa; border-radius: 15px;'>
-            <div style='font-size: 4rem; margin-bottom: 1rem;'>🤖</div>
-            <h2 style='color: #495057;'>Welcome to the ML Dashboard</h2>
-            <p style='color: #6c757d; font-size: 1.1rem; max-width: 600px; margin: 0 auto 2rem auto;'>
-                Select a machine learning model from the sidebar to view its performance metrics 
-                and make predictions using custom input features.
-            </p>
-            <div style='color: #667eea; font-size: 2rem; margin-top: 2rem;'>
-                ↓
-            </div>
-            <p style='color: #6c757d; margin-top: 1rem;'>
-                <strong>Start by choosing a model from the left sidebar</strong>
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
+    Upload a **CSV file** with the **same columns** as the original dataset.  
+    The selected models will be **retrained on your uploaded data** (80/20 split) and evaluated.  
+    All metrics and classification reports are displayed below.
+    """)
+
+    uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
+        st.success(f"✅ File loaded: {uploaded_file.name} – shape {df.shape}")
+
+        with st.expander("📄 Preview of uploaded data"):
+            st.dataframe(df.head())
+
+        # Required columns check
+        required_cols = [
+            'Gender', 'Age', 'Height', 'Weight', 'family_history_with_overweight',
+            'FAVC', 'FCVC', 'NCP', 'CAEC', 'SMOKE', 'CH2O', 'SCC',
+            'FAF', 'TUE', 'CALC', 'MTRANS', 'NObeyesdad'
+        ]
+        missing = [col for col in required_cols if col not in df.columns]
+        if missing:
+            st.error(f"❌ Missing columns: {missing}")
+            return
+
+        st.markdown("---")
+        st.markdown("## 🎯 Select Models to Evaluate")
+
+        # Model dictionary
+        model_dict = {
+            "Logistic Regression": logistic_regression,
+            "Decision Tree": decision_tree,
+            "KNN": knn,
+            "Naive Bayes": naive_bayes,
+            "Random Forest": random_forest,
+            "XGBoost": xgboost_model
+        }
+
+        # Session state for selection
+        if "selected_models" not in st.session_state:
+            st.session_state.selected_models = []
+
+        col1, col2, col3 = st.columns([3, 1, 1])
+
+        with col1:
+            selected_names = st.multiselect(
+                "Choose one or more models:",
+                options=list(model_dict.keys()),
+                default=st.session_state.selected_models
+            )
+
+        with col2:
+            st.markdown("### &nbsp;")
+            if st.button("✔️ Select All"):
+                st.session_state.selected_models = list(model_dict.keys())
+                st.rerun()
+
+        with col3:
+            st.markdown("### &nbsp;")
+            compute_clicked = st.button("🚀 Compute")
+
+        # Update session state
+        st.session_state.selected_models = selected_names
+
+        if not compute_clicked:
+            st.info("ℹ️ Select models and click **Compute** to start evaluation.")
+            return
+
+        if not selected_names:
+            st.warning("⚠️ Please select at least one model.")
+            return
+
+        # Filter selected models
+        selected_models = [(name, model_dict[name]) for name in selected_names]
+
+        st.markdown("---")
+        st.markdown("## 🔄 Running selected models ...")
+
+        all_results = []
+        all_reports = {}
+
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+
+        for i, (name, func) in enumerate(selected_models):
+            status_text.text(f"Training {name} ...")
+            try:
+                result_row, report_dict = func(df)
+                all_results.append(result_row)
+                all_reports[name] = report_dict
+            except Exception as e:
+                st.error(f"⚠️ Error in {name}: {str(e)}")
+
+            progress_bar.progress((i + 1) / len(selected_models))
+
+        status_text.text("✅ All selected models completed!")
+        progress_bar.empty()
+
+        if all_results:
+            metrics_df = pd.concat(all_results, ignore_index=True)
+            metrics_df = metrics_df[
+                ['Model', 'Accuracy', 'AUC', 'Precision', 'Recall', 'F1 Score', 'MCC']
+            ]
+
+            st.markdown("---")
+            st.markdown("## 📊 Performance Comparison")
+
+            st.dataframe(
+                metrics_df.style
+                .background_gradient(
+                    cmap='Blues',
+                    subset=['Accuracy', 'AUC', 'Precision', 'Recall', 'F1 Score', 'MCC']
+                )
+                .format(precision=3)
+            )
+
+            csv = metrics_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "📥 Download Metrics CSV",
+                csv,
+                "batch_performance.csv",
+                "text/csv"
+            )
+
+            st.markdown("---")
+            st.markdown("## 📋 Classification Reports")
+
+            tabs = st.tabs(selected_names)
+            for tab, name in zip(tabs, selected_names):
+                with tab:
+                    report_df = pd.DataFrame(all_reports[name]).transpose()
+                    st.dataframe(report_df.style.format(precision=3))
+
+        else:
+            st.error("❌ No models could be evaluated successfully.")
+
+# --------------------------------------------------
+# Main router
+# --------------------------------------------------
+if page == "Single Prediction":
+    single_prediction_page()
+else:
+    batch_evaluation_page()
