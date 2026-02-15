@@ -1,6 +1,6 @@
 ## a. Problem Statement
 
-The aim of this project is to develop and evaluate multiple machine learning classification models to predict obesity levels based on individuals’ eating habits, physical activity, and lifestyle conditions.
+The aim is to develop and evaluate multiple machine learning classification models to predict obesity levels based on individuals’ eating habits, physical activity, and lifestyle conditions.
 
 The dataset **Estimation of Obesity Levels Based On Eating Habits and Physical Condition** contains demographic, behavioral, and physical attributes such as age, gender, dietary habits, physical activity frequency, and transportation methods.  
 The target variable **NObeyesdad** represents different obesity categories.
@@ -9,51 +9,67 @@ The primary goal is to compare the performance of various machine learning model
 
 ---
 
+## b. Dataset Description
+
+The dataset **Estimation of Obesity Levels Based On Eating Habits and Physical Condition** is obtained from the **UCI Machine Learning Repository**:  
+https://archive.ics.uci.edu/dataset/544/estimation+of+obesity+levels+based+on+eating+habits+and+physical+condition
+
+### Dataset Characteristics
+- Total instances: **2111**
+- Total attributes: **17**
+- Data collected from individuals in **Mexico, Peru, and Colombia**
+- Age range: approximately **14–61 years**
+- Combination of **survey-based data** and **synthetically generated samples** (using SMOTE)
+
+### Feature Categories
+- **Demographic Features**: Gender, Age, Height, Weight  
+- **Eating Habits**: High-calorie food consumption, vegetable intake frequency, number of meals, snacking habits, water consumption  
+- **Lifestyle Factors**: Physical activity frequency, technology usage time, alcohol consumption, smoking habits, transportation method  
+- **Family History**: Family history with overweight  
+
+### Target Variable
+- **NObeyesdad**: A multi-class label representing seven obesity levels:
+  - Insufficient Weight  
+  - Normal Weight  
+  - Overweight Level I  
+  - Overweight Level II  
+  - Obesity Type I  
+  - Obesity Type II  
+  - Obesity Type III  
+
+---
+
 ## c. Models Used
 
-The following six machine learning models were implemented and evaluated:
+The following six machine learning classification models were implemented and evaluated:
 
 - Logistic Regression  
 - Decision Tree  
 - k-Nearest Neighbors (kNN)  
 - Naive Bayes  
 - Random Forest (Ensemble)  
-- XGBoost (Ensemble)
+- XGBoost (Ensemble)  
 
-These models represent a mix of linear, tree-based, probabilistic, distance-based, and ensemble learning techniques.
-
----
-
-## Model Performance Comparison
+These models cover linear, probabilistic, distance-based, tree-based, and ensemble learning approaches.
 
 ### Evaluation Metrics Comparison Table
 
 |Model|Accuracy|AUC|Precision|Recall|F1 Score|MCC|
 |--------------|----------|-----|-----------|--------|----------|------|
-|Logistic_Regression|0.8597122302158273|0.9842740614199484|0.8341264121699034|0.8376137932811766|0.8350115033059174|0.8343814652613227|
-|Decision_Tree|0.9820143884892086|0.9874546107480305|0.9797464440321584|0.9778496013790131|0.978487194250741|0.9787938044980558|
-|KNN|0.8165467625899281|0.9521763613175971|0.7853127298664824|0.7902967269197482|0.7836502097776636|0.784191983849469|
-|Naive_Bayes|0.762589928057554|0.97586425377299|0.8258094440122089|0.7200486276800523|0.710093212508377|0.730935267875705|
-|Random_Forest|0.9964028776978417|0.9999635787683661|0.9964285714285713|0.9952380952380953|0.9957703742299323|0.9957592204635709|
-|XGBoost|0.9928057553956835|0.9999291387628558|0.9910364145658264|0.9910364145658264|0.9910364145658264|0.9914891011511143|
-
-
----
+|Logistic_Regression|0.8597|0.9842|0.8341|0.8376|0.8350|0.8343|
+|Decision_Tree|0.9820|0.9874|0.9797|0.9778|0.9784|0.9787|
+|KNN|0.8165|0.9521|0.7853|0.7902|0.7836|0.7841|
+|Naive_Bayes|0.7625|0.9758|0.8258|0.7200|0.7100|0.7309|
+|Random_Forest|0.9964|0.9999|0.9964|0.9952|0.9957|0.9957|
+|XGBoost|0.9928|0.9999|0.9910|0.9910|0.9910|0.9914|
 
 ### Model-wise Performance Observations
 
-| ML Model Name | Observation about Model Performance |
-|--------------|-------------------------------------|
-| Logistic Regression | Delivered good baseline performance with high AUC but was limited in modeling complex non-linear relationships. |
-| Decision Tree | Achieved very high accuracy and balanced metrics, indicating strong learning capability but potential overfitting. |
+| ML Model | Observation |
+|---------|-------------|
+| Logistic Regression | Provided strong baseline performance with high AUC but limited ability to model non-linear feature interactions. |
+| Decision Tree | Achieved very high accuracy and balanced metrics, indicating strong learning capacity but potential overfitting risk. |
 | kNN | Showed moderate performance and was sensitive to feature scaling and choice of k value. |
-| Naive Bayes | Simple and fast model with good AUC, but lower recall and F1 score due to strong independence assumptions. |
-| Random Forest (Ensemble) | Best overall performer with highest accuracy, precision, recall, and F1 score, showing excellent generalization. |
-| XGBoost (Ensemble) | Delivered near-optimal performance across all metrics and proved to be robust and efficient. |
-
----
-
-### Conclusion
-
-Ensemble-based models outperformed individual classifiers in predicting obesity levels.  
-The Random Forest model achieved the best overall performance, making it the most suitable model for this task, while XGBoost also provided highly competitive results.
+| Naive Bayes | Simple and computationally efficient with good AUC, but lower recall and F1 score due to independence assumptions. |
+| Random Forest | Best overall performer with superior accuracy, precision, recall, F1 score, and MCC, indicating excellent generalization. |
+| XGBoost | Delivered near-optimal and consistent performance across all evaluation metrics, demonstrating robustness and efficiency. |
