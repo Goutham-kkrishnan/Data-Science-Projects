@@ -15,7 +15,8 @@ from models.xgboost import xgboost_model
 from models.preprocessing import (
     preprocess_features,
     encode_categorical_columns,
-    TARGET_MAPPING
+    TARGET_MAPPING,
+    TARGET_NAMES
 )
 
 warnings.filterwarnings("ignore")
@@ -760,7 +761,8 @@ def test_data_evaluation_page():
                 y_true,
                 y_pred,
                 output_dict=True,
-                zero_division=0
+                zero_division=0,
+                target_names=TARGET_NAMES
             )
         ).transpose()
 
