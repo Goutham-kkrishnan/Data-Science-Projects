@@ -12,7 +12,12 @@ from models.knn import knn
 from models.naive_bayes import naive_bayes
 from models.random_forest import random_forest
 from models.xgboost import xgboost_model
-from models.preprocessing import preprocess_features
+from models.preprocessing import (
+    preprocess_features,
+    encode_categorical_columns,
+    TARGET_MAPPING
+)
+
 warnings.filterwarnings("ignore")
 
 # --------------------------------------------------
@@ -173,9 +178,7 @@ st.markdown("""
         background: linear-gradient(90deg, var(--color-4), var(--color-5));
     }
  
-    .stAppToolbar {
-        display: none;
-    }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -185,10 +188,11 @@ st.markdown("""
 st.sidebar.markdown("## 🧠 **Navigation**")
 page = st.sidebar.radio(
     "Go to",
-    ["Dashboard","Batch Model Evaluation", "Single Prediction"],
+    ["Dashboard", "Batch Model Evaluation", "Single Prediction", "Test Data Evaluation"],
     index=0,
     format_func=lambda x: f"📌 {x}"
 )
+
 
 st.sidebar.markdown("---")
 st.sidebar.markdown(
@@ -250,8 +254,10 @@ def dashboard_page():
         <h3 style="color:#F5B027; margin-top:0;">🧭 How to Use This App</h3>
         <ul style="color:#f8fafc; font-size:1.05rem; line-height:1.8;">
             <li><strong style="color:#F5276C;">1. Dashboard (you are here)</strong> – Overview and quick access to model performance.</li>
-            <li><strong style="color:#F5276C;">2. Batch Model Evaluation</strong> – Upload your dataset (CSV) and compare multiple machine learning models at once. You will see performance metrics, classification reports, and per‑class correct/incorrect counts. You can download a sample dataset also.</li>
+            <li><strong style="color:#F5276C;">2. Batch Model Evaluation</strong> – Upload your dataset (CSV). Then the uploaded data will be trained and tested will return the performance of multiple machine learning models at once. You will see performance metrics, classification reports, and per‑class correct/incorrect counts. You can download a sample dataset also.</li>
             <li><strong style="color:#F5276C;">3. Single Prediction</strong> – Use a pre‑trained model to predict the obesity level for one individual. Enter the person’s features and click <em>Predict</em>.</li>
+            <li><strong style="color:#F5276C;">4. Test Data Evaluation</strong> – Evaluate a pre-trained model on uploaded test data and view performance metrics and classification reports. Includes sample test data download.</li>
+
         </ul>
     </div>
     """, unsafe_allow_html=True)
@@ -265,7 +271,8 @@ def dashboard_page():
             perf_df[['Model', 'Accuracy', 'AUC', 'Precision', 'Recall', 'F1 Score']]
             .style.background_gradient(cmap='coolwarm', subset=['Accuracy', 'AUC', 'Precision', 'Recall', 'F1 Score'])
             .format(precision=3),
-            use_container_width=True
+            width="stretch"
+
         )
 
         st.subheader("📊 Accuracy Comparison")
@@ -274,6 +281,7 @@ def dashboard_page():
     else:
         # If no data, still show a friendly reminder
         st.info("👆 Head over to **Batch Model Evaluation** to train models and generate performance data.")
+
 # --------------------------------------------------
 # PAGE 1 : BATCH MODEL EVALUATION (with sample data download)
 # --------------------------------------------------
@@ -308,7 +316,7 @@ def batch_evaluation_page():
         st.success(f"✅ **Loaded:** {uploaded_file.name} – {df.shape[0]} rows, {df.shape[1]} columns")
 
         with st.expander("🔍 Preview uploaded data"):
-            st.dataframe(df.head(10), use_container_width=True)
+            st.dataframe(df.head(10), width="stretch")
 
         # Required columns check
         required_cols = [
@@ -414,7 +422,7 @@ def batch_evaluation_page():
                         subset=['Accuracy', 'AUC', 'Precision', 'Recall', 'F1 Score', 'MCC']
                     )
                     .format(precision=3),
-                    use_container_width=True
+                    width="stretch"
                 )
 
             csv = metrics_df.to_csv(index=False).encode("utf-8")
@@ -461,11 +469,12 @@ def batch_evaluation_page():
                     # Display with formatting
                     st.dataframe(
                         report_df.style.format(precision=3),
-                        use_container_width=True
+                        width="stretch"
                     )
 
         else:
             st.error("❌ No models could be evaluated successfully.")
+
 
 # --------------------------------------------------
 # PAGE 2 : SINGLE PREDICTION
@@ -551,7 +560,7 @@ def single_prediction_page():
         # Predict button centered
         col_b1, col_b2, col_b3 = st.columns([1, 2, 1])
         with col_b2:
-            predict_clicked = st.button("🚀 **Predict Obesity Level**", use_container_width=True)
+            predict_clicked = st.button("🚀 **Predict Obesity Level**", width="stretch")
 
         if predict_clicked:
             model_path = f"models/{selected_model}.pkl"
@@ -590,6 +599,174 @@ def single_prediction_page():
                 st.balloons()
                 st.success(f"### ✅ **Predicted Obesity Category:** **{prediction}**")
 
+
+# --------------------------------------------------
+# Page 3 : Test Data Evaluation
+# --------------------------------------------------
+
+def test_data_evaluation_page():
+    st.markdown("<h1 class='main-title'>📊 Test Data Evaluation</h1>", unsafe_allow_html=True)
+    st.markdown(
+        "<p class='subtitle'>Evaluate pre-trained models on uploaded test data</p>",
+        unsafe_allow_html=True
+    )
+    st.markdown("---")
+
+    # --------------------------------------------------
+    # Download sample test data
+    # --------------------------------------------------
+    col_left, col_right = st.columns([1, 2])
+
+    with col_left:
+        if os.path.exists("test_data.csv"):
+            with open("test_data.csv", "rb") as f:
+                st.download_button(
+                    label="📥 Download Sample Test CSV",
+                    data=f,
+                    file_name="test_data.csv",
+                    mime="text/csv"
+                )
+        else:
+            st.warning("⚠️ Sample file 'test_data.csv' not found.")
+
+    with col_right:
+        uploaded_file = st.file_uploader(
+            "Upload Test CSV",
+            type="csv"
+        )
+
+    if uploaded_file is None:
+        st.info("ℹ️ Upload a test CSV file to continue.")
+        return
+
+    # --------------------------------------------------
+    # Load & preview data
+    # --------------------------------------------------
+    df = pd.read_csv(uploaded_file)
+    st.success(f"✅ Loaded: {df.shape[0]} rows × {df.shape[1]} columns")
+
+    with st.expander("🔍 Preview uploaded test data"):
+        st.dataframe(df.head(), use_container_width=True)
+
+    # --------------------------------------------------
+    # Required columns check
+    # --------------------------------------------------
+    required_cols = [
+        'Gender', 'Age', 'Height', 'Weight',
+        'family_history_with_overweight', 'FAVC', 'FCVC', 'NCP',
+        'CAEC', 'SMOKE', 'CH2O', 'SCC', 'FAF', 'TUE',
+        'CALC', 'MTRANS', 'NObeyesdad'
+    ]
+
+    missing = [c for c in required_cols if c not in df.columns]
+    if missing:
+        st.error(f"❌ Missing columns: {missing}")
+        return
+
+    # --------------------------------------------------
+    # Select pretrained model
+    # --------------------------------------------------
+    MODEL_DIR = "models"
+    model_files = [
+        f.replace(".pkl", "")
+        for f in os.listdir(MODEL_DIR)
+        if f.endswith(".pkl") and f != "scaler.pkl"
+    ]
+
+    selected_model = st.selectbox(
+        "🧠 Select Pre-trained Model",
+        ["-- Select Model --"] + model_files
+    )
+
+    if selected_model == "-- Select Model --":
+        return
+
+    # --------------------------------------------------
+    # Evaluate model
+    # --------------------------------------------------
+    if st.button("🚀 Evaluate Model", type="primary"):
+        model_path = f"{MODEL_DIR}/{selected_model}.pkl"
+        scaler_path = f"{MODEL_DIR}/scaler.pkl"
+
+        if not os.path.exists(model_path):
+            st.error("❌ Model file not found.")
+            return
+
+        if not os.path.exists(scaler_path):
+            st.error("❌ Scaler file not found.")
+            return
+
+        # Load model & scaler
+        model = pickle.load(open(model_path, "rb"))
+        scaler = pickle.load(open(scaler_path, "rb"))
+
+        # --------------------------------------------------
+        # Split X / y (ENCODE y_true)
+        # --------------------------------------------------
+        X = df.drop(columns=["NObeyesdad"])
+        y_true = df["NObeyesdad"].map(TARGET_MAPPING)
+
+        if y_true.isna().any():
+            unseen = set(df["NObeyesdad"]) - set(TARGET_MAPPING.keys())
+            st.error(f"❌ Unseen target labels in test data: {unseen}")
+            return
+
+        # --------------------------------------------------
+        # Apply SAME preprocessing as training
+        # --------------------------------------------------
+        X = preprocess_features(X)
+        X = encode_categorical_columns(X)
+
+        # Scale
+        X_scaled = scaler.transform(X)
+
+        # Predict
+        y_pred = model.predict(X_scaled)
+
+        # --------------------------------------------------
+        # Metrics
+        # --------------------------------------------------
+        from sklearn.metrics import (
+            accuracy_score,
+            precision_score,
+            recall_score,
+            f1_score,
+            classification_report
+        )
+
+        acc = accuracy_score(y_true, y_pred)
+        prec = precision_score(y_true, y_pred, average="macro", zero_division=0)
+        rec = recall_score(y_true, y_pred, average="macro", zero_division=0)
+        f1 = f1_score(y_true, y_pred, average="macro", zero_division=0)
+
+        st.markdown("## 📈 Performance Metrics")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Accuracy", f"{acc:.3f}")
+        c2.metric("Precision", f"{prec:.3f}")
+        c3.metric("Recall", f"{rec:.3f}")
+        c4.metric("F1 Score", f"{f1:.3f}")
+
+        # --------------------------------------------------
+        # Classification Report
+        # --------------------------------------------------
+        st.markdown("---")
+        st.markdown("## 📋 Classification Report")
+
+        report_df = pd.DataFrame(
+            classification_report(
+                y_true,
+                y_pred,
+                output_dict=True,
+                zero_division=0
+            )
+        ).transpose()
+
+        st.dataframe(
+            report_df.style.format(precision=3),
+            use_container_width=True
+        )
+
+
 # --------------------------------------------------
 # Main router
 # --------------------------------------------------
@@ -597,5 +774,7 @@ if page == "Dashboard":
     dashboard_page()
 elif page == "Batch Model Evaluation":
     batch_evaluation_page()
-else:
+elif page == "Single Prediction":
     single_prediction_page()
+else:
+    test_data_evaluation_page()
