@@ -4,6 +4,7 @@ import pandas as pd
 import pickle
 import warnings
 from io import BytesIO
+import numpy as np
 
 # Import your model functions
 from models.logistic_regression import logistic_regression
@@ -603,11 +604,9 @@ def single_prediction_page():
                 st.balloons()
                 st.success(f"### ✅ **Predicted Obesity Category:** **{prediction}**")
 
-
 # --------------------------------------------------
-# Page 3 : Test Data Evaluation
+# Page 3 : Test Data Evaluation (FIXED)
 # --------------------------------------------------
-
 def test_data_evaluation_page():
     st.markdown("<h1 class='main-title'>📊 Test Data Evaluation</h1>", unsafe_allow_html=True)
     st.markdown(
@@ -721,11 +720,35 @@ def test_data_evaluation_page():
         X = preprocess_features(X)
         X = encode_categorical_columns(X)
 
-        # Scale
-        X_scaled = scaler.transform(X)
+        # --- NEW: Align columns with the model's training order (if available) ---
+        if hasattr(model, 'feature_names_in_'):
+            expected_cols = list(model.feature_names_in_)
+            missing_in_X = set(expected_cols) - set(X.columns)
+            if missing_in_X:
+                st.error(f"❌ Test data is missing features: {missing_in_X}")
+                return
+            # Reorder X to match the model's expected order
+            X = X[expected_cols]
+        
+
+        # --- NEW: Conditional scaling based on model type ---
+        models_that_need_scaling = ["Logistic_Regression", "KNN", "Naive_Bayes"]
+        if selected_model in models_that_need_scaling:
+            # Align with scaler's expected order if available
+            if hasattr(scaler, 'feature_names_in_'):
+                scaler_cols = list(scaler.feature_names_in_)
+                # Ensure X has exactly those columns in that order
+                if set(scaler_cols) != set(X.columns):
+                    st.error("❌ Feature mismatch between scaler and test data.")
+                    return
+                X = X[scaler_cols]
+            X_final = scaler.transform(X)
+        else:
+            # Tree‑based models: no scaling
+            X_final = X.values
 
         # Predict
-        y_pred = model.predict(X_scaled)
+        y_pred = model.predict(X_final)
 
         # --------------------------------------------------
         # Metrics
@@ -750,6 +773,10 @@ def test_data_evaluation_page():
         c3.metric("Recall", f"{rec:.3f}")
         c4.metric("F1 Score", f"{f1:.3f}")
 
+        # Optional: show unique predictions for debugging
+        unique_preds = np.unique(y_pred)
+        st.caption(f"Unique predictions: {unique_preds}")
+
         # --------------------------------------------------
         # Classification Report
         # --------------------------------------------------
@@ -770,8 +797,6 @@ def test_data_evaluation_page():
             report_df.style.format(precision=3),
             use_container_width=True
         )
-
-
 # --------------------------------------------------
 # Main router
 # --------------------------------------------------
