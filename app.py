@@ -177,10 +177,13 @@ st.markdown("""
     .stProgress > div > div > div > div {
         background: linear-gradient(90deg, var(--color-4), var(--color-5));
     }
- 
+    
+    
 
 </style>
 """, unsafe_allow_html=True)
+
+
 
 # --------------------------------------------------
 # Sidebar – Page Selection (Batch first)
@@ -192,6 +195,7 @@ page = st.sidebar.radio(
     index=0,
     format_func=lambda x: f"📌 {x}"
 )
+
 
 
 st.sidebar.markdown("---")
@@ -257,7 +261,6 @@ def dashboard_page():
             <li><strong style="color:#F5276C;">2. Batch Model Evaluation</strong> – Upload your dataset (CSV). Then the uploaded data will be trained and tested will return the performance of multiple machine learning models at once. You will see performance metrics, classification reports, and per‑class correct/incorrect counts. You can download a sample dataset also.</li>
             <li><strong style="color:#F5276C;">3. Single Prediction</strong> – Use a pre‑trained model to predict the obesity level for one individual. Enter the person’s features and click <em>Predict</em>.</li>
             <li><strong style="color:#F5276C;">4. Test Data Evaluation</strong> – Evaluate a pre-trained model on uploaded test data and view performance metrics and classification reports. Includes sample test data download.</li>
-
         </ul>
     </div>
     """, unsafe_allow_html=True)
